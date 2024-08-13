@@ -1,3 +1,4 @@
+import secrets
 from sqlalchemy import Column, Integer, String, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from .database import Base
@@ -12,6 +13,9 @@ class User(Base):
     tweets = relationship("Tweet", back_populates="author")
     followers = relationship("Follow", back_populates="followed_user")
     following = relationship("Follow", back_populates="follower_user")
+
+    def generate_api_key(self):
+        self.api_key = secrets.token_hex(32)
 
 class Tweet(Base):
     __tablename__ = "tweets"

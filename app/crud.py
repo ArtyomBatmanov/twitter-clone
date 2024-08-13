@@ -3,6 +3,7 @@ from .models import User, Tweet
 from .schemas import TweetCreate
 
 
+
 def create_tweet(db: Session, tweet: TweetCreate, user_id: int):
     db_tweet = Tweet(content=tweet.content, author_id=user_id)
     db.add(db_tweet)
@@ -23,5 +24,4 @@ def delete_tweet(db: Session, tweet_id: int, user_id: int):
     return db_tweet
 
 
-def get_user_by_api_key(db: Session, api_key: str) -> User:
-    return db.query(User).filter(User.api_key == api_key).first()
+
