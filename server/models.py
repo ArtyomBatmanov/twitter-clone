@@ -11,17 +11,41 @@ class User(Base):
     api_key = Column(String, unique=True, index=True)
 
     tweets = relationship("Tweet", back_populates="author")
-    followers = relationship("Follow", back_populates="followed_user")
-    following = relationship("Follow", back_populates="follower_user")
+    followers = relationship(
+        "Follow",
+        foreign_keys="[Follow.followed_id]",
+        back_populates="followed"
+    )
+
+    following = relationship(
+        "Follow",
+        foreign_keys="[Follow.follower_id]",
+        back_populates="follower"
+    )
 
     def generate_api_key(self):
         self.api_key = secrets.token_hex(32)
+
+
+
+
+class Follow(Base):
+    __tablename__ = "follows"
+
+    id = Column(Integer, primary_key=True, index=True)
+    follower_id = Column(Integer, ForeignKey('users.id'))
+    followed_id = Column(Integer, ForeignKey('users.id'))
+
+    follower = relationship("User", foreign_keys=[follower_id], back_populates="following")
+    followed = relationship("User", foreign_keys=[followed_id], back_populates="followers")
+
+
 
 class Tweet(Base):
     __tablename__ = "tweets"
 
     id = Column(Integer, primary_key=True, index=True)
-    content = Column(Text, nullable=False)
+    tweet_data = Column(Text, nullable=False)
     author_id = Column(Integer, ForeignKey("users.id"))
 
     author = relationship("User", back_populates="tweets")
@@ -37,15 +61,7 @@ class Like(Base):
 
     tweet = relationship("Tweet", back_populates="likes")
 
-class Follow(Base):
-    __tablename__ = "follows"
 
-    id = Column(Integer, primary_key=True, index=True)
-    follower_id = Column(Integer, ForeignKey("users.id"))
-    followed_id = Column(Integer, ForeignKey("users.id"))
-
-    follower_user = relationship("User", foreign_keys=[follower_id], back_populates="following")
-    followed_user = relationship("User", foreign_keys=[followed_id], back_populates="followers")
 
 class Media(Base):
     __tablename__ = "media"
