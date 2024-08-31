@@ -4,7 +4,7 @@ from typing import List, Optional
 
 class TweetCreate(BaseModel):
     tweet_data: str
-    tweet_media_ids: list[int] = []  # Добавьте это поле, если оно нужно
+    tweet_media_ids: list[int] = []
 
 
 class Tweet(BaseModel):
@@ -23,3 +23,8 @@ class TweetResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class MediaUploadResponse(BaseModel):
+    result: bool
+    media_id: int

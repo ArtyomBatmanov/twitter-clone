@@ -70,3 +70,6 @@ class Media(Base):
     file_path = Column(String)
 
     tweet = relationship("Tweet", back_populates="media")
+
+
+
