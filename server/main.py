@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, Header, UploadFile, File
 from .schemas import Tweet, TweetCreate, TweetResponse, MediaUploadResponse
 from .database import get_db
 from sqlalchemy.orm import Session
-from .crud import add_tweet
+from .crud import add_tweet, get_tweet
 from .utils import get_api_key, get_user_by_api_key
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import FileResponse
@@ -69,3 +69,22 @@ def upload_media(
     db.refresh(media)
 
     return MediaUploadResponse(result=True, media_id=media.id)
+
+
+@app.delete("/api/tweets/{id}")
+def delete_tweet(id: int, api_key: str = Header(..., alias="api-key"), db: Session = Depends(get_db)):
+    user = get_user_by_api_key(db, api_key)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    tweet = get_tweet(db, id)
+    if not tweet:
+        raise HTTPException(status_code=404, detail="Tweet not found")
+
+    if tweet.author_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this tweet")
+
+    db.delete(tweet)
+    db.commit()
+
+    return {"result": True}
