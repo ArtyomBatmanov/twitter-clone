@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, Header, UploadFile, File
 from .schemas import Tweet, TweetCreate, TweetResponse, MediaUploadResponse
 from .database import get_db
 from sqlalchemy.orm import Session
-from .crud import add_tweet, get_tweet
+from .crud import add_tweet, get_tweet, add_like
 from .utils import get_api_key, get_user_by_api_key
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import FileResponse
@@ -86,5 +86,20 @@ def delete_tweet(id: int, api_key: str = Header(..., alias="api-key"), db: Sessi
 
     db.delete(tweet)
     db.commit()
+
+    return {"result": True}
+
+
+@app.post("/api/tweets/{id}/likes")
+def like_tweet(id: int, api_key: str = Header(..., alias="api-key"), db: Session = Depends(get_db)):
+    user = get_user_by_api_key(db, api_key)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    tweet = get_tweet(db, id)
+    if not tweet:
+        raise HTTPException(status_code=404, detail="Tweet not found")
+
+    add_like(db=db, user_id=user.id, tweet_id=tweet.id)
 
     return {"result": True}
