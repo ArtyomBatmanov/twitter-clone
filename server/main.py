@@ -6,7 +6,7 @@ from .crud import add_tweet, get_tweet, add_like
 from .utils import get_api_key, get_user_by_api_key
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import FileResponse
-from .models import User, Media
+from .models import User, Media, Follow
 import shutil
 import os
 
@@ -103,3 +103,35 @@ def like_tweet(id: int, api_key: str = Header(..., alias="api-key"), db: Session
     add_like(db=db, user_id=user.id, tweet_id=tweet.id)
 
     return {"result": True}
+
+
+@app.post("/api/users/{id}/follow")
+def follow_user(
+        id: int,
+        api_key: str = Header(..., alias="api-key"),
+        db: Session = Depends(get_db)
+):
+    # Найти пользователя, который хочет подписаться
+    follower = get_user_by_api_key(db, api_key)
+    if not follower:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Найти пользователя, на которого хотят подписаться
+    followed = db.query(User).filter(User.id == id).first()
+    if not followed:
+        raise HTTPException(status_code=404, detail="User to follow not found")
+
+    # Проверить, что пользователь не пытается подписаться сам на себя
+    if follower.id == followed.id:
+        raise HTTPException(status_code=400, detail="Users cannot follow themselves")
+
+    # Добавить запись в таблицу подписок
+    follow = Follow(follower_id=follower.id, followed_id=followed.id)
+
+    try:
+        db.add(follow)
+        db.commit()
+        return {"result": True}
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="You already follow this user")
