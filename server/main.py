@@ -1,12 +1,15 @@
 from fastapi import FastAPI, Depends, HTTPException, Header, UploadFile, File
-from .schemas import Tweet, TweetCreate, TweetResponse, MediaUploadResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
+from .schemas import TweetCreate, TweetResponse, MediaUploadResponse
 from .database import get_db
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy import select
 from .crud import add_tweet, get_tweet, add_like
 from .utils import get_api_key, get_user_by_api_key
-from fastapi.staticfiles import StaticFiles
 from starlette.responses import FileResponse
-from .models import User, Media, Follow
+from .models import User, Media, Follow, Like, Tweet
 import shutil
 import os
 
@@ -135,3 +138,47 @@ def follow_user(
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=400, detail="You already follow this user")
+
+
+@app.get("/api/tweets")
+def get_user_feed(
+    api_key: str = Header(..., alias="api-key"),
+    db: Session = Depends(get_db)
+):
+    try:
+        user = get_user_by_api_key(db, api_key)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+                # Находим ID пользователей, на которых подписан текущий пользователь
+        followed_users = db.query(Follow.followed_id).filter(Follow.follower_id == user.id).all()
+        followed_user_ids = [followed_id for (followed_id,) in followed_users]
+        #
+        # # Получаем твиты от пользователей, на которых подписан пользователь
+        tweets = db.query(Tweet).options(
+            joinedload(Tweet.author),
+            joinedload(Tweet.attachments),
+            joinedload(Tweet.likes).joinedload(Like.user)
+        ).filter(Tweet.author_id.in_(followed_user_ids)).all()
+
+        # # Формируем ответ
+        tweet_list = []
+        for tweet in tweets:
+            tweet_list.append({
+                "id": tweet.id,
+                "content": tweet.tweet_data,
+                "attachments": [f"/media/{media.id}" for media in tweet.attachments],
+                "author": {
+                    "id": tweet.author.id,
+                    "name": tweet.author.name,
+                },
+                "likes": [{"user_id": like.user.id, "name": like.user.name} for like in tweet.likes]
+            })
+
+        return {"result": True, "tweets": tweet_list}
+
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"result": False, "error_type": "ServerError", "error_message": str(e)}
+        )

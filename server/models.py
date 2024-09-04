@@ -11,6 +11,7 @@ class User(Base):
     api_key = Column(String, unique=True, index=True)
 
     tweets = relationship("Tweet", back_populates="author")
+    likes = relationship("Like", back_populates="user")
     followers = relationship(
         "Follow",
         foreign_keys="[Follow.followed_id]",
@@ -51,6 +52,7 @@ class Tweet(Base):
     author = relationship("User", back_populates="tweets")
     likes = relationship("Like", back_populates="tweet")
     media = relationship("Media", back_populates="tweet")
+    attachments = relationship("Media", back_populates="tweet")
 
 class Like(Base):
     __tablename__ = "likes"
@@ -60,6 +62,7 @@ class Like(Base):
     tweet_id = Column(Integer, ForeignKey("tweets.id"))
 
     tweet = relationship("Tweet", back_populates="likes")
+    user = relationship("User", back_populates="likes")
 
 
 
@@ -69,7 +72,7 @@ class Media(Base):
     tweet_id = Column(Integer, ForeignKey("tweets.id"))
     file_path = Column(String)
 
-    tweet = relationship("Tweet", back_populates="media")
+    tweet = relationship("Tweet", back_populates="attachments")
 
 
 
