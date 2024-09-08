@@ -5,9 +5,8 @@ from .schemas import TweetCreate, TweetResponse, MediaUploadResponse
 from .database import get_db
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import select
-from .crud import add_tweet, get_tweet, add_like
-from .utils import get_api_key, get_user_by_api_key
+from .crud import add_tweet, get_tweet, add_like, get_user_profile
+from .utils import get_user_by_api_key
 from starlette.responses import FileResponse
 from .models import User, Media, Follow, Like, Tweet
 import shutil
@@ -26,7 +25,6 @@ def get_current_user(api_key: str = Header(...), db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid API Key")
     return user
 
-
 @app.get("/index")
 def read_main():
     return FileResponse("../client/static/index.html")
@@ -34,9 +32,9 @@ def read_main():
 
 @app.post("/api/tweets", response_model=TweetResponse)
 def create_tweet(
-        tweet: TweetCreate,
-        api_key: str = Header(..., alias="api-key"),
-        db: Session = Depends(get_db)
+    tweet: TweetCreate,
+    api_key: str = Header(..., alias="api-key"),
+    db: Session = Depends(get_db),
 ):
     user = get_user_by_api_key(db, api_key)
     if not user:
@@ -48,24 +46,20 @@ def create_tweet(
 
 @app.post("/api/medias", response_model=MediaUploadResponse)
 def upload_media(
-        api_key: str = Header(..., alias="api-key"),
-        file: UploadFile = File(...),
-        db: Session = Depends(get_db)
+    api_key: str = Header(..., alias="api-key"),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
 ):
     user = get_user_by_api_key(db, api_key)
 
-    # Убедитесь, что директория для загрузок существует
     upload_dir = "uploads"
     os.makedirs(upload_dir, exist_ok=True)
 
-    # Создание уникального пути для сохранения файла
     file_path = os.path.join(upload_dir, file.filename)
 
-    # Сохранение файла на диск
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    # Сохранение информации о файле в базе данных
     media = Media(file_path=file_path)
     db.add(media)
     db.commit()
@@ -75,7 +69,9 @@ def upload_media(
 
 
 @app.delete("/api/tweets/{id}")
-def delete_tweet(id: int, api_key: str = Header(..., alias="api-key"), db: Session = Depends(get_db)):
+def delete_tweet(
+    id: int, api_key: str = Header(..., alias="api-key"), db: Session = Depends(get_db)
+):
     user = get_user_by_api_key(db, api_key)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -85,7 +81,9 @@ def delete_tweet(id: int, api_key: str = Header(..., alias="api-key"), db: Sessi
         raise HTTPException(status_code=404, detail="Tweet not found")
 
     if tweet.author_id != user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to delete this tweet")
+        raise HTTPException(
+            status_code=403, detail="Not authorized to delete this tweet"
+        )
 
     db.delete(tweet)
     db.commit()
@@ -94,7 +92,9 @@ def delete_tweet(id: int, api_key: str = Header(..., alias="api-key"), db: Sessi
 
 
 @app.post("/api/tweets/{id}/likes")
-def like_tweet(id: int, api_key: str = Header(..., alias="api-key"), db: Session = Depends(get_db)):
+def like_tweet(
+    id: int, api_key: str = Header(..., alias="api-key"), db: Session = Depends(get_db)
+):
     user = get_user_by_api_key(db, api_key)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -110,25 +110,19 @@ def like_tweet(id: int, api_key: str = Header(..., alias="api-key"), db: Session
 
 @app.post("/api/users/{id}/follow")
 def follow_user(
-        id: int,
-        api_key: str = Header(..., alias="api-key"),
-        db: Session = Depends(get_db)
+    id: int, api_key: str = Header(..., alias="api-key"), db: Session = Depends(get_db)
 ):
-    # Найти пользователя, который хочет подписаться
     follower = get_user_by_api_key(db, api_key)
     if not follower:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Найти пользователя, на которого хотят подписаться
     followed = db.query(User).filter(User.id == id).first()
     if not followed:
         raise HTTPException(status_code=404, detail="User to follow not found")
 
-    # Проверить, что пользователь не пытается подписаться сам на себя
     if follower.id == followed.id:
         raise HTTPException(status_code=400, detail="Users cannot follow themselves")
 
-    # Добавить запись в таблицу подписок
     follow = Follow(follower_id=follower.id, followed_id=followed.id)
 
     try:
@@ -142,43 +136,121 @@ def follow_user(
 
 @app.get("/api/tweets")
 def get_user_feed(
-    api_key: str = Header(..., alias="api-key"),
-    db: Session = Depends(get_db)
+    api_key: str = Header(..., alias="api-key"), db: Session = Depends(get_db)
 ):
     try:
         user = get_user_by_api_key(db, api_key)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
-                # Находим ID пользователей, на которых подписан текущий пользователь
-        followed_users = db.query(Follow.followed_id).filter(Follow.follower_id == user.id).all()
+        followed_users = (
+            db.query(Follow.followed_id).filter(Follow.follower_id == user.id).all()
+        )
         followed_user_ids = [followed_id for (followed_id,) in followed_users]
-        #
-        # # Получаем твиты от пользователей, на которых подписан пользователь
-        tweets = db.query(Tweet).options(
-            joinedload(Tweet.author),
-            joinedload(Tweet.attachments),
-            joinedload(Tweet.likes).joinedload(Like.user)
-        ).filter(Tweet.author_id.in_(followed_user_ids)).all()
 
-        # # Формируем ответ
+        tweets = (
+            db.query(Tweet)
+            .options(
+                joinedload(Tweet.author),
+                joinedload(Tweet.attachments),
+                joinedload(Tweet.likes).joinedload(Like.user),
+            )
+            .filter(Tweet.author_id.in_(followed_user_ids))
+            .all()
+        )
+
         tweet_list = []
         for tweet in tweets:
-            tweet_list.append({
-                "id": tweet.id,
-                "content": tweet.tweet_data,
-                "attachments": [f"/media/{media.id}" for media in tweet.attachments],
-                "author": {
-                    "id": tweet.author.id,
-                    "name": tweet.author.name,
-                },
-                "likes": [{"user_id": like.user.id, "name": like.user.name} for like in tweet.likes]
-            })
+            tweet_list.append(
+                {
+                    "id": tweet.id,
+                    "content": tweet.tweet_data,
+                    "attachments": [
+                        f"/media/{media.id}" for media in tweet.attachments
+                    ],
+                    "author": {
+                        "id": tweet.author.id,
+                        "name": tweet.author.name,
+                    },
+                    "likes": [
+                        {"user_id": like.user.id, "name": like.user.name}
+                        for like in tweet.likes
+                    ],
+                }
+            )
 
         return {"result": True, "tweets": tweet_list}
 
     except Exception as e:
         return JSONResponse(
             status_code=500,
-            content={"result": False, "error_type": "ServerError", "error_message": str(e)}
+            content={
+                "result": False,
+                "error_type": "ServerError",
+                "error_message": str(e),
+            },
         )
+
+
+@app.get("/login")
+def get_user_me(
+    api_key: str = Header(..., alias="api-key"), db: Session = Depends(get_db)
+):
+    user = get_user_by_api_key(db, api_key)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user_data, followers, following = get_user_profile(db, user.id)
+
+    response = {
+        "result": "true",
+        "user": {
+            "id": user_data.id,
+            "name": user_data.name,
+            "followers": [
+                {"id": follower.id, "name": follower.name} for follower in followers
+            ],
+            "following": [
+                {"id": followed.id, "name": followed.name} for followed in following
+            ],
+        },
+    }
+
+    return response
+
+
+@app.get("/api/users/{id}")
+def get_user_by_id(id: int, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    followers = (
+        db.query(User)
+        .join(Follow, Follow.follower_id == User.id)
+        .filter(Follow.followed_id == id)
+        .all()
+    )
+
+    following = (
+        db.query(User)
+        .join(Follow, Follow.followed_id == User.id)
+        .filter(Follow.follower_id == id)
+        .all()
+    )
+
+    response = {
+        "result": "true",
+        "user": {
+            "id": user.id,
+            "name": user.name,
+            "followers": [
+                {"id": follower.id, "name": follower.name} for follower in followers
+            ],
+            "following": [
+                {"id": followed.id, "name": followed.name} for followed in following
+            ],
+        },
+    }
+
+    return response

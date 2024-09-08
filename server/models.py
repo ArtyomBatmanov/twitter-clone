@@ -3,6 +3,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from .database import Base
 
+
 class User(Base):
     __tablename__ = "users"
 
@@ -13,33 +14,30 @@ class User(Base):
     tweets = relationship("Tweet", back_populates="author")
     likes = relationship("Like", back_populates="user")
     followers = relationship(
-        "Follow",
-        foreign_keys="[Follow.followed_id]",
-        back_populates="followed"
+        "Follow", foreign_keys="[Follow.followed_id]", back_populates="followed"
     )
 
     following = relationship(
-        "Follow",
-        foreign_keys="[Follow.follower_id]",
-        back_populates="follower"
+        "Follow", foreign_keys="[Follow.follower_id]", back_populates="follower"
     )
 
     def generate_api_key(self):
         self.api_key = secrets.token_hex(32)
 
 
-
-
 class Follow(Base):
     __tablename__ = "follows"
 
     id = Column(Integer, primary_key=True, index=True)
-    follower_id = Column(Integer, ForeignKey('users.id'))
-    followed_id = Column(Integer, ForeignKey('users.id'))
+    follower_id = Column(Integer, ForeignKey("users.id"))
+    followed_id = Column(Integer, ForeignKey("users.id"))
 
-    follower = relationship("User", foreign_keys=[follower_id], back_populates="following")
-    followed = relationship("User", foreign_keys=[followed_id], back_populates="followers")
-
+    follower = relationship(
+        "User", foreign_keys=[follower_id], back_populates="following"
+    )
+    followed = relationship(
+        "User", foreign_keys=[followed_id], back_populates="followers"
+    )
 
 
 class Tweet(Base):
@@ -51,8 +49,8 @@ class Tweet(Base):
 
     author = relationship("User", back_populates="tweets")
     likes = relationship("Like", back_populates="tweet")
-    media = relationship("Media", back_populates="tweet")
     attachments = relationship("Media", back_populates="tweet")
+
 
 class Like(Base):
     __tablename__ = "likes"
@@ -65,7 +63,6 @@ class Like(Base):
     user = relationship("User", back_populates="likes")
 
 
-
 class Media(Base):
     __tablename__ = "media"
     id = Column(Integer, primary_key=True, index=True)
@@ -73,6 +70,3 @@ class Media(Base):
     file_path = Column(String)
 
     tweet = relationship("Tweet", back_populates="attachments")
-
-
-

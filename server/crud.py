@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
-from .models import User, Tweet, Like
+from .models import User, Tweet, Like, Follow
 from .schemas import TweetCreate, TweetResponse
 
 
@@ -17,7 +17,7 @@ def add_tweet(db: Session, tweet: TweetCreate, user_id: int):
         id=db_tweet.id,
         tweet_data=db_tweet.tweet_data,  # Используйте правильное поле
         author_id=db_tweet.author_id,
-        tweet_media_ids=media_ids
+        tweet_media_ids=media_ids,
     )
 
 
@@ -26,7 +26,9 @@ def get_tweet(db: Session, tweet_id: int):
 
 
 def delete_tweet(db: Session, tweet_id: int, user_id: int):
-    db_tweet = db.query(Tweet).filter(Tweet.id == tweet_id, Tweet.author_id == user_id).first()
+    db_tweet = (
+        db.query(Tweet).filter(Tweet.id == tweet_id, Tweet.author_id == user_id).first()
+    )
     if db_tweet:
         db.delete(db_tweet)
         db.commit()
@@ -43,3 +45,23 @@ def add_like(db: Session, user_id: int, tweet_id: int):
         raise HTTPException(status_code=400, detail="Like already exists")
     db.refresh(like)
     return like
+
+
+def get_user_profile(db: Session, user_id: int):
+    user = db.query(User).filter(User.id == user_id).first()
+
+    followers = (
+        db.query(User)
+        .join(Follow, Follow.follower_id == User.id)
+        .filter(Follow.followed_id == user_id)
+        .all()
+    )
+
+    following = (
+        db.query(User)
+        .join(Follow, Follow.followed_id == User.id)
+        .filter(Follow.follower_id == user_id)
+        .all()
+    )
+
+    return user, followers, following
