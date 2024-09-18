@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, Header, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, Header, UploadFile, File, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from .schemas import TweetCreate, TweetResponse, MediaUploadResponse
@@ -25,7 +25,7 @@ def get_current_user(api_key: str = Header(...), db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid API Key")
     return user
 
-@app.get("/index")
+@app.get("/")
 def read_main():
     return FileResponse("../client/static/index.html")
 
@@ -135,13 +135,9 @@ def follow_user(
 
 
 @app.get("/api/tweets")
-def get_user_feed(
-    api_key: str = Header(..., alias="api-key"), db: Session = Depends(get_db)
-):
+def get_user_feed(request: Request, db: Session = Depends(get_db)):
     try:
-        user = get_user_by_api_key(db, api_key)
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+        user = request.state.user  # Получаем пользователя из middleware
 
         followed_users = (
             db.query(Follow.followed_id).filter(Follow.follower_id == user.id).all()
@@ -190,6 +186,7 @@ def get_user_feed(
                 "error_message": str(e),
             },
         )
+
 
 
 @app.get("/login")
@@ -254,3 +251,38 @@ def get_user_by_id(id: int, db: Session = Depends(get_db)):
     }
 
     return response
+
+
+@app.middleware("http")
+async def check_user_middleware(request: Request, call_next):
+    if request.url.path.startswith("/api"):
+        api_key = request.headers.get("Api-Key")
+
+        if not api_key:
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "result": False,
+                    "error_type": "Unauthorized",
+                    "error_message": "API key is missing",
+                }
+            )
+
+        db = next(get_db())
+        user = get_user_by_api_key(db, api_key)
+
+        if not user:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "result": False,
+                    "error_type": "NotFound",
+                    "error_message": "User not found",
+                }
+            )
+
+        request.state.user = user
+
+    response = await call_next(request)
+    return response
+
