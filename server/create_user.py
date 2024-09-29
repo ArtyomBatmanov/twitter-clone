@@ -1,8 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import IntegrityError
-
-# Определение модели User
 from models import User
 
 DATABASE_URL = "postgresql://admin:admin@localhost/twitter_clone"
@@ -23,7 +21,7 @@ def create_user(db, name: str, api_key: str):
 
 if __name__ == "__main__":
     db = SessionLocal()
-    user_name = "example_user_2"
-    user_api_key = "example_api_key_2"
+    user_name = "example_user"
+    user_api_key = "test"
     create_user(db, user_name, user_api_key)
     db.close()

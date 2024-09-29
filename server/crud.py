@@ -1,8 +1,8 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
-from .models import User, Tweet, Like, Follow
-from .schemas import TweetCreate, TweetResponse
+from models import User, Tweet, Like, Follow
+from schemas import TweetCreate, TweetResponse
 
 
 def add_tweet(db: Session, tweet: TweetCreate, user_id: int):

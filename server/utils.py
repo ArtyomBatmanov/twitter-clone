@@ -1,5 +1,5 @@
 from fastapi import Header, HTTPException
-from .models import User
+from models import User
 from sqlalchemy.orm import Session
 
 

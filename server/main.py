@@ -1,41 +1,54 @@
 from fastapi import FastAPI, Depends, HTTPException, Header, UploadFile, File, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
-from .schemas import TweetCreate, TweetResponse, MediaUploadResponse
-from .database import get_db
+from schemas import TweetCreate, TweetResponse, MediaUploadResponse
+from database import get_db, SessionLocal
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
-from .crud import add_tweet, get_tweet, add_like, get_user_profile
-from .utils import get_user_by_api_key
+from crud import add_tweet, get_tweet, add_like, get_user_profile
+from utils import get_user_by_api_key
 from starlette.responses import FileResponse
-from .models import User, Media, Follow, Like, Tweet
+from models import User, Media, Follow, Like, Tweet
 import shutil
 import os
 
 app = FastAPI()
 
-app.mount("/static", StaticFiles(directory="../client/static"), name="static")
-app.mount("/js", StaticFiles(directory="../client/static/js"), name="js")
-app.mount("/css", StaticFiles(directory="../client/static/css"), name="css")
+# app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "../client/static")), name="static")
+# app.mount("/js", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "../client/static/js")), name="js")
+# app.mount("/css", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "../client/static/css")), name="css")
+
+
+app.mount("/static", StaticFiles(directory=".../client/static"), name="static")
+app.mount("/js", StaticFiles(directory=".../client/static/js"), name="js")
+app.mount("/css", StaticFiles(directory=".../client/static/css"), name="css")
 
 
 def get_current_user(api_key: str = Header(...), db: Session = Depends(get_db)):
+    """
+    Получить текущего пользователя по API-ключу.
+    """
     user = db.query(User).filter(User.api_key == api_key).first()
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid API Key")
     return user
+
 
 @app.get("/")
 def read_main():
     return FileResponse("../client/static/index.html")
 
 
-@app.post("/api/tweets", response_model=TweetResponse)
+@app.post("/api/tweets", response_model=TweetResponse, summary="Создать твит",
+          description="Создаёт новый твит для пользователя.")
 def create_tweet(
-    tweet: TweetCreate,
-    api_key: str = Header(..., alias="api-key"),
-    db: Session = Depends(get_db),
+        tweet: TweetCreate,
+        api_key: str = Header(..., alias="api-key"),
+        db: Session = Depends(get_db),
 ):
+    """
+    Этот эндпоинт создаёт новый твит. Пользователь должен быть авторизован через API-ключ.
+    """
     user = get_user_by_api_key(db, api_key)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -44,12 +57,16 @@ def create_tweet(
     return db_tweet
 
 
-@app.post("/api/medias", response_model=MediaUploadResponse)
+@app.post("/api/medias", response_model=MediaUploadResponse, summary="Загрузить медиафайл",
+          description="Загружает медиафайл для пользователя.")
 def upload_media(
-    api_key: str = Header(..., alias="api-key"),
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
+        api_key: str = Header(..., alias="api-key"),
+        file: UploadFile = File(...),
+        db: Session = Depends(get_db),
 ):
+    """
+    Эндпоинт для загрузки медиафайла.
+    """
     user = get_user_by_api_key(db, api_key)
 
     upload_dir = "uploads"
@@ -68,10 +85,14 @@ def upload_media(
     return MediaUploadResponse(result=True, media_id=media.id)
 
 
-@app.delete("/api/tweets/{id}")
+@app.delete("/api/tweets/{id}", summary="Удалить твит",
+            description="Удаляет указанный твит, если пользователь является его автором.")
 def delete_tweet(
-    id: int, api_key: str = Header(..., alias="api-key"), db: Session = Depends(get_db)
+        id: int, api_key: str = Header(..., alias="api-key"), db: Session = Depends(get_db)
 ):
+    """
+    Удаление твита по его ID. Только автор твита может его удалить.
+    """
     user = get_user_by_api_key(db, api_key)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -91,10 +112,13 @@ def delete_tweet(
     return {"result": True}
 
 
-@app.post("/api/tweets/{id}/likes")
+@app.post("/api/tweets/{id}/likes", summary="Лайкнуть твит", description="Лайкнуть указанный твит.")
 def like_tweet(
-    id: int, api_key: str = Header(..., alias="api-key"), db: Session = Depends(get_db)
+        id: int, api_key: str = Header(..., alias="api-key"), db: Session = Depends(get_db)
 ):
+    """
+    Лайкнуть твит по его ID.
+    """
     user = get_user_by_api_key(db, api_key)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -108,10 +132,14 @@ def like_tweet(
     return {"result": True}
 
 
-@app.post("/api/users/{id}/follow")
+@app.post("/api/users/{id}/follow", summary="Подписаться на пользователя",
+          description="Подписаться на указанного пользователя.")
 def follow_user(
-    id: int, api_key: str = Header(..., alias="api-key"), db: Session = Depends(get_db)
+        id: int, api_key: str = Header(..., alias="api-key"), db: Session = Depends(get_db)
 ):
+    """
+    Подписаться на пользователя по его ID. Нельзя подписаться на самого себя.
+    """
     follower = get_user_by_api_key(db, api_key)
     if not follower:
         raise HTTPException(status_code=404, detail="User not found")
@@ -136,8 +164,11 @@ def follow_user(
 
 @app.get("/api/tweets")
 def get_user_feed(request: Request, db: Session = Depends(get_db)):
+    """
+    Получить список твитов по рекмоендациям.
+    """
     try:
-        user = request.state.user  # Получаем пользователя из middleware
+        user = request.state.user
 
         followed_users = (
             db.query(Follow.followed_id).filter(Follow.follower_id == user.id).all()
@@ -188,11 +219,16 @@ def get_user_feed(request: Request, db: Session = Depends(get_db)):
         )
 
 
-
 @app.get("/login")
 def get_user_me(
-    api_key: str = Header(..., alias="api-key"), db: Session = Depends(get_db)
+        request: Request,
+        # api_key: str = Header(..., alias="api-key"),
+        db: Session = Depends(get_db)
 ):
+    """
+    Авторизация пользователя по API-key
+    """
+    api_key = request.headers.get('api-key', 'test')
     user = get_user_by_api_key(db, api_key)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -218,6 +254,9 @@ def get_user_me(
 
 @app.get("/api/users/{id}")
 def get_user_by_id(id: int, db: Session = Depends(get_db)):
+    """
+    Получить информацию о пользователе по ID
+    """
     user = db.query(User).filter(User.id == id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -255,34 +294,40 @@ def get_user_by_id(id: int, db: Session = Depends(get_db)):
 
 @app.middleware("http")
 async def check_user_middleware(request: Request, call_next):
-    if request.url.path.startswith("/api"):
-        api_key = request.headers.get("Api-Key")
+    db: Session = SessionLocal()
 
-        if not api_key:
-            return JSONResponse(
-                status_code=401,
-                content={
-                    "result": False,
-                    "error_type": "Unauthorized",
-                    "error_message": "API key is missing",
-                }
-            )
+    try:
+        if request.url.path.startswith("/api"):
+            api_key = request.headers.get("Api-Key")
 
-        db = next(get_db())
-        user = get_user_by_api_key(db, api_key)
+            if api_key:
+                user = db.query(User).filter(User.api_key == api_key).first()
+                if not user:
+                    return JSONResponse(
+                        status_code=404,
+                        content={
+                            "result": False,
+                            "error_type": "NotFound",
+                            "error_message": "User not found",
+                        },
+                    )
+            else:
+                user = db.query(User).filter(User.id == TEST_USER_ID).first()
+                if not user:
+                    return JSONResponse(
+                        status_code=500,
+                        content={
+                            "result": False,
+                            "error_type": "ServerError",
+                            "error_message": "Test user not found in the database",
+                        },
+                    )
 
-        if not user:
-            return JSONResponse(
-                status_code=404,
-                content={
-                    "result": False,
-                    "error_type": "NotFound",
-                    "error_message": "User not found",
-                }
-            )
+            request.state.user = user
 
-        request.state.user = user
+        response = await call_next(request)
 
-    response = await call_next(request)
+    finally:
+        db.close()
+
     return response
-
