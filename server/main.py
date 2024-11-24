@@ -19,14 +19,16 @@ app = FastAPI()
 # app.mount("/css", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "../client/static/css")), name="css")
 
 
-app.mount("/static", StaticFiles(directory=".../client/static"), name="static")
-app.mount("/js", StaticFiles(directory=".../client/static/js"), name="js")
-app.mount("/css", StaticFiles(directory=".../client/static/css"), name="css")
+# app.mount("/static", StaticFiles(directory=".../client/static"), name="static")
+# app.mount("/js", StaticFiles(directory=".../client/static/js"), name="js")
+# app.mount("/css", StaticFiles(directory=".../client/static/css"), name="css")
 
+
+TEST_USER_ID = 1
 
 def get_current_user(api_key: str = Header(...), db: Session = Depends(get_db)):
     """
-    Получить текущего пользователя по API-ключу.
+    Получить текущего пользователя по API-ключу.1
     """
     user = db.query(User).filter(User.api_key == api_key).first()
     if user is None:
@@ -36,7 +38,7 @@ def get_current_user(api_key: str = Header(...), db: Session = Depends(get_db)):
 
 @app.get("/")
 def read_main():
-    return FileResponse("../client/static/index.html")
+    return FileResponse("/client/static/index.html")
 
 
 @app.post("/api/tweets", response_model=TweetResponse, summary="Создать твит",
